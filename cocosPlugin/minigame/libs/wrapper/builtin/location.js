@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", {
 exports["default"] = void 0;
 var location = {
   href: 'game.js',
+  protocol: '',
   reload: function reload() {}
 };
 var _default = location;

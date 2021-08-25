@@ -1,4 +1,5 @@
 require('./libs/wrapper/builtin/index');
+const firstScreen = require('./first-screen');
 window.DOMParser = require('./libs/common/xmldom/dom-parser').DOMParser;
 require('./libs/common/engine/globalAdapter/index');
 require('./libs/wrapper/unify');
@@ -61,12 +62,17 @@ function fetchWasm(path) {
     const engineDir = 'cocos-js'; // Relative from project out
     return `${engineDir}/${path}`;
 }
-
-System.import('./application.js').then(({ createApplication }) => {
+firstScreen.start('default', 'default').then(() => {
+    return System.import('./application.js');
+}).then((module) => {
+    return firstScreen.setProgress(0.2).then(() => Promise.resolve(module));
+}).then(({ createApplication }) => {
     return createApplication({
         loadJsListFile: (url) => require(url),
         fetchWasm,
     });
+}).then((application) => {
+    return firstScreen.setProgress(0.4).then(() => Promise.resolve(application));
 }).then((application) => {
     return onApplicationCreated(application);
 }).catch((err) => {
@@ -74,20 +80,21 @@ System.import('./application.js').then(({ createApplication }) => {
 });
 
 function onApplicationCreated(application) {
-    return application.import('cc').then((cc) => {
+    return application.import('cc').then((module) => {
+        return firstScreen.setProgress(0.6).then(() => Promise.resolve(module));
+    }).then((cc) => {
         require('./libs/common/engine/index.js');
         require('./libs/wrapper/engine/index');
-        cc.sys.__init();
         require('./libs/common/cache-manager.js');
         // Adjust devicePixelRatio
         cc.view._maxPixelRatio = 4;
         // Release Image objects after uploaded gl texture
         cc.macro.CLEANUP_IMAGE_CACHE = false;
-        return application.start({
+        return firstScreen.end().then(() => application.start({
             findCanvas: () => {
                 var container = document.createElement('div');
                 return { frame: container, canvas: window.canvas, container };
             },
-        });
+        }));
     });
 }

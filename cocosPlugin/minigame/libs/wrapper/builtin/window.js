@@ -188,6 +188,7 @@ var _WindowProperties = require("./WindowProperties");
 Object.keys(_WindowProperties).forEach(function (key) {
   if (key === "default" || key === "__esModule") return;
   if (Object.prototype.hasOwnProperty.call(_exportNames, key)) return;
+  if (key in exports && exports[key] === _WindowProperties[key]) return;
   Object.defineProperty(exports, key, {
     enumerable: true,
     get: function get() {

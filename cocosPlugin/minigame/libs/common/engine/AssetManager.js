@@ -9,7 +9,8 @@ var _window$fsUtils = window.fsUtils,
     readArrayBuffer = _window$fsUtils.readArrayBuffer,
     readJson = _window$fsUtils.readJson,
     loadSubpackage = _window$fsUtils.loadSubpackage,
-    getUserDataPath = _window$fsUtils.getUserDataPath;
+    getUserDataPath = _window$fsUtils.getUserDataPath,
+    exists = _window$fsUtils.exists;
 var REGEX = /^https?:\/\/.*/;
 var downloader = cc.assetManager.downloader;
 var parser = cc.assetManager.parser;
@@ -82,11 +83,17 @@ function loadInnerAudioContext(url) {
   });
 }
 
-function downloadDomAudio(url, options, onComplete) {
-  loadInnerAudioContext(url).then(function (nativeAudio) {
-    onComplete(null, nativeAudio);
-  }, function (err) {
-    onComplete(new Error(err));
+function loadAudioPlayer(url, options, onComplete) {
+  cc.AudioPlayer.load(url).then(function (player) {
+    var audioMeta = {
+      player: player,
+      url: url,
+      duration: player.duration,
+      type: player.type
+    };
+    onComplete(null, audioMeta);
+  })["catch"](function (err) {
+    onComplete(err);
   });
 }
 
@@ -143,6 +150,10 @@ function downloadJson(url, options, onComplete) {
   download(url, parseJson, options, options.onFileProgress, onComplete);
 }
 
+function downloadArrayBuffer(url, options, onComplete) {
+  download(url, parseArrayBuffer, options, options.onFileProgress, onComplete);
+}
+
 function loadFont(url, options, onComplete) {
   var fontFamily = __globalAdapter.loadFont(url);
 
@@ -150,12 +161,62 @@ function loadFont(url, options, onComplete) {
 }
 
 function doNothing(content, options, onComplete) {
-  onComplete(null, content);
+  exists(content, function (existence) {
+    if (existence) {
+      onComplete(null, content);
+    } else {
+      onComplete(new Error("file ".concat(content, " does not exist!")));
+    }
+  });
 }
 
 function downloadAsset(url, options, onComplete) {
   download(url, doNothing, options, options.onFileProgress, onComplete);
 }
+
+var downloadCCON = function downloadCCON(url, options, onComplete) {
+  downloadJson(url, options, function (err, json) {
+    if (err) {
+      onComplete(err);
+      return;
+    }
+
+    var cconPreface = cc.internal.parseCCONJson(json);
+    var chunkPromises = Promise.all(cconPreface.chunks.map(function (chunk) {
+      return new Promise(function (resolve, reject) {
+        downloadArrayBuffer("".concat(cc.path.mainFileName(url)).concat(chunk), {}, function (errChunk, chunkBuffer) {
+          if (errChunk) {
+            reject(errChunk);
+          } else {
+            resolve(new Uint8Array(chunkBuffer));
+          }
+        });
+      });
+    }));
+    chunkPromises.then(function (chunks) {
+      var ccon = new cc.internal.CCON(cconPreface.document, chunks);
+      onComplete(null, ccon);
+    })["catch"](function (err) {
+      onComplete(err);
+    });
+  });
+};
+
+var downloadCCONB = function downloadCCONB(url, options, onComplete) {
+  downloadArrayBuffer(url, options, function (err, arrayBuffer) {
+    if (err) {
+      onComplete(err);
+      return;
+    }
+
+    try {
+      var ccon = cc.internal.decodeCCONBinary(new Uint8Array(arrayBuffer));
+      onComplete(null, ccon);
+    } catch (err) {
+      onComplete(err);
+    }
+  });
+};
 
 function downloadBundle(nameOrUrl, options, onComplete) {
   var bundleName = cc.path.basename(nameOrUrl);
@@ -170,13 +231,9 @@ function downloadBundle(nameOrUrl, options, onComplete) {
         return;
       }
 
-      downloader.importBundleEntry(bundleName).then(function () {
-        downloadJson(config, options, function (err, data) {
-          data && (data.base = "subpackages/".concat(bundleName, "/"));
-          onComplete(err, data);
-        });
-      })["catch"](function (err) {
-        onComplete(err);
+      downloadJson(config, options, function (err, data) {
+        data && (data.base = "subpackages/".concat(bundleName, "/"));
+        onComplete(err, data);
       });
     });
   } else {
@@ -199,48 +256,44 @@ function downloadBundle(nameOrUrl, options, onComplete) {
 
     require('../../../' + js);
 
-    downloader.importBundleEntry(bundleName).then(function () {
-      options.__cacheBundleRoot__ = bundleName;
-      var config = "".concat(url, "/config.").concat(suffix, "json");
-      downloadJson(config, options, function (err, data) {
-        if (err) {
-          onComplete && onComplete(err);
-          return;
-        }
+    options.__cacheBundleRoot__ = bundleName;
+    var config = "".concat(url, "/config.").concat(suffix, "json");
+    downloadJson(config, options, function (err, data) {
+      if (err) {
+        onComplete && onComplete(err);
+        return;
+      }
 
-        if (data.isZip) {
-          var zipVersion = data.zipVersion;
-          var zipUrl = "".concat(url, "/res.").concat(zipVersion ? zipVersion + '.' : '', "zip");
-          handleZip(zipUrl, options, function (err, unzipPath) {
-            if (err) {
-              onComplete && onComplete(err);
-              return;
+      if (data.isZip) {
+        var zipVersion = data.zipVersion;
+        var zipUrl = "".concat(url, "/res.").concat(zipVersion ? zipVersion + '.' : '', "zip");
+        handleZip(zipUrl, options, function (err, unzipPath) {
+          if (err) {
+            onComplete && onComplete(err);
+            return;
+          }
+
+          data.base = unzipPath + '/res/'; // PATCH: for android alipay version before v10.1.95 (v10.1.95 included)
+          // to remove in the future
+
+          var sys = cc.sys;
+
+          if (sys.platform === sys.Platform.ALIPAY_MINI_GAME && sys.os === sys.OS.ANDROID) {
+            var resPath = unzipPath + 'res/';
+
+            if (fs.accessSync({
+              path: resPath
+            })) {
+              data.base = resPath;
             }
+          }
 
-            data.base = unzipPath + '/res/'; // PATCH: for android alipay version before v10.1.95 (v10.1.95 included)
-            // to remove in the future
-
-            var sys = cc.sys;
-
-            if (sys.platform === sys.ALIPAY_MINI_GAME && sys.os === sys.OS_ANDROID) {
-              var resPath = unzipPath + 'res/';
-
-              if (fs.accessSync({
-                path: resPath
-              })) {
-                data.base = resPath;
-              }
-            }
-
-            onComplete && onComplete(null, data);
-          });
-        } else {
-          data.base = url + '/';
           onComplete && onComplete(null, data);
-        }
-      });
-    })["catch"](function (err) {
-      onComplete && onComplete(err);
+        });
+      } else {
+        data.base = url + '/';
+        onComplete && onComplete(null, data);
+      }
     });
   }
 }
@@ -282,7 +335,6 @@ var parsePlist = function parsePlist(url, options, onComplete) {
   });
 };
 
-downloader.downloadDomAudio = downloadDomAudio;
 downloader.downloadScript = downloadScript;
 parser.parsePVRTex = parsePVRTex;
 parser.parsePKMTex = parsePKMTex;
@@ -307,12 +359,15 @@ downloader.register({
   '.webp': downloadAsset,
   '.pvr': downloadAsset,
   '.pkm': downloadAsset,
+  '.astc': downloadAsset,
   '.font': downloadAsset,
   '.eot': downloadAsset,
   '.ttf': downloadAsset,
   '.woff': downloadAsset,
   '.svg': downloadAsset,
   '.ttc': downloadAsset,
+  '.ccon': downloadCCON,
+  '.cconb': downloadCCONB,
   // Txt
   '.txt': downloadAsset,
   '.xml': downloadAsset,
@@ -359,10 +414,10 @@ parser.register({
   '.svg': loadFont,
   '.ttc': loadFont,
   // Audio
-  '.mp3': downloadDomAudio,
-  '.ogg': downloadDomAudio,
-  '.wav': downloadDomAudio,
-  '.m4a': downloadDomAudio,
+  '.mp3': loadAudioPlayer,
+  '.ogg': loadAudioPlayer,
+  '.wav': loadAudioPlayer,
+  '.m4a': loadAudioPlayer,
   // Txt
   '.txt': parseText,
   '.xml': parseText,
@@ -426,6 +481,12 @@ cc.assetManager.transformPipeline.append(function (task) {
       options.cacheEnabled = options.cacheEnabled !== undefined ? options.cacheEnabled : false;
     } else {
       options.__cacheBundleRoot__ = item.config.name;
+    }
+
+    if (item.ext === '.cconb') {
+      item.url = item.url.replace(item.ext, '.bin');
+    } else if (item.ext === '.ccon') {
+      item.url = item.url.replace(item.ext, '.json');
     }
   }
 });

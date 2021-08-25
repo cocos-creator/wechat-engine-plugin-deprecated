@@ -8,7 +8,7 @@ const { removeSync, writeJSONSync, emptyDirSync, copySync, readJsonSync } = requ
 let copyTime = 0;
 
 // cocos3DEngine wx0446ba2621dda60a
-const appid = 'wx7095f7fa398a2f30';
+const appid = 'wx0446ba2621dda60a';
 
 function onAfterBuild(options, result) {
     const pkgOptions = options.packages.wechatgame;

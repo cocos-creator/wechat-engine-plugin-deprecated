@@ -12,6 +12,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "d
 function _default() {
   var image = wx.createImage(); // image.__proto__.__proto__.__proto__ = new HTMLImageElement();
 
+  image.premultiplyAlpha = false;
   return image;
 }
 

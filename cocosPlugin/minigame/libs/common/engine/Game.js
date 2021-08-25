@@ -14,76 +14,11 @@ Object.assign(game, {
       this._paused = true;
 
       this._setAnimFrame();
-
-      this._runMainLoop();
     }
   },
   getFrameRate: function getFrameRate() {
     return _frameRate;
-  },
-  _runMainLoop: function _runMainLoop() {
-    var self = this,
-        _callback,
-        config = self.config,
-        director = cc.director,
-        skip = true,
-        frameRate = config.frameRate;
-
-    cc.debug.setDisplayStats(config.showFPS);
-    director.startAnimation();
-
-    _callback = function callback(time) {
-      if (!self._paused) {
-        self._intervalId = window.rAF(_callback);
-
-        if (_frameRate === 30 && !__globalAdapter.setPreferredFramesPerSecond) {
-          if (skip = !skip) {
-            return;
-          }
-        }
-
-        director.mainLoop(time);
-      }
-    };
-
-    if (self._intervalId) {
-      window.cAF(self._intervalId);
-      self._intervalId = 0;
-    }
-
-    self._intervalId = window.rAF(_callback);
-    self._paused = false;
-  },
-  _initEvents: function _initEvents() {
-    var hidden = false;
-
-    function onHidden() {
-      if (!hidden) {
-        hidden = true;
-        cc.game.emit(cc.Game.EVENT_HIDE);
-      }
-    }
-
-    function onShown() {
-      if (hidden) {
-        hidden = false;
-        cc.game.emit(cc.Game.EVENT_SHOW);
-      }
-    }
-
-    __globalAdapter.onAudioInterruptionEnd && __globalAdapter.onAudioInterruptionEnd(onShown);
-    __globalAdapter.onAudioInterruptionBegin && __globalAdapter.onAudioInterruptionBegin(onHidden);
-    __globalAdapter.onShow && __globalAdapter.onShow(onShown);
-    __globalAdapter.onHide && __globalAdapter.onHide(onHidden);
-    this.on(cc.Game.EVENT_HIDE, function () {
-      cc.game.pause();
-    });
-    this.on(cc.Game.EVENT_SHOW, function () {
-      cc.game.resume();
-    });
-  },
-  end: function end() {} // mini game platform not support this api
-
+  }
 }); //  Small game in the screen log
 
 function onErrorMessageHandler(info) {
